@@ -1,0 +1,209 @@
+Program.Sub.ScreenSU.Start
+Gui.Form..Create
+Gui.Form..Caption("Positive Pay")
+Gui.Form..Size(5085,2565)
+Gui.Form..MinX(0)
+Gui.Form..MinY(0)
+Gui.Form..Position(0,0)
+Gui.Form..BackColor(-2147483633)
+Gui.Form..MaxButton(False)
+Gui.Form..MinButton(False)
+Gui.Form..MousePointer(0)
+Gui.Form..Sizeable(False)
+Gui.Form..Event(UnLoad,Form_UnLoad)
+Gui.Form.dtp1.Create(DatePicker)
+Gui.Form.dtp1.Size(1935,285)
+Gui.Form.dtp1.Position(315,750)
+Gui.Form.dtp2.Create(DatePicker)
+Gui.Form.dtp2.Size(1935,285)
+Gui.Form.dtp2.Position(2775,765)
+Gui.Form.lblbegdate.Create(Label,"Beginning Date",True,1935,255,0,300,420,True,0,"Arial",8,-2147483633,0)
+Gui.Form.lblEndingDate.Create(Label,"Ending Date",True,1935,255,0,2715,420,True,0,"Arial",8,-2147483633,0)
+Gui.Form.cmdCreate.Create(Button)
+Gui.Form.cmdCreate.Size(1200,465)
+Gui.Form.cmdCreate.Position(315,1305)
+Gui.Form.cmdCreate.Caption("Create")
+Gui.Form.cmdCreate.Event(Click,cmdCreate_Click)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+
+'READ OPTION 400460 to store an autonumber for transactions.  Each vendor within a transaction listing should get a new  "auto number" to use for the Payment ID.
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+'Custom Positive Pay program 
+'Coded by: WAW
+'Date: 11/14/16
+
+'opening connection
+F.ODBC.Connection!conx.OpenConnection(V.Ambient.PDSN,V.Ambient.PUser,V.Ambient.PPass)
+
+'display the form
+gui.Form..Visible(true)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_5367_PosPay.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub(form_unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.Main.End
+
+Program.Sub.Form_UnLoad.Start
+F.Intrinsic.Control.SetErrorHandler("Comments_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+'closing connection and ending program
+F.ODBC.Connection!conx.Close
+Function.Intrinsic.Control.End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Comments_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_5367_PosPay.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.End
+
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.Form_UnLoad.End
+
+Program.Sub.cmdCreate_Click.Start
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sbegdate.Declare(String)
+v.Local.senddate.Declare(string)
+v.Local.sfilename.Declare(String)
+v.Local.sfilepath.Declare(String)
+v.Local.dcurrentdate.Declare(date)
+v.Local.ssql.Declare(string)
+v.local.sfileline.declare(string)
+v.local.sfilefinal.declare(String)
+v.local.schkdate.declare(string)
+v.Local.saccount.Declare(string)
+v.Local.samt.Declare(string)
+v.Local.sckno.Declare(String)
+v.local.spayee.declare(string)
+v.local.spayee2.declare(string)
+v.Local.saction.Declare(string)
+
+'get the beg date, format
+V.Local.sfilename.Set(v.Screen.Form!dtp1.Value)
+f.Intrinsic.String.Format(v.Local.sfilename,"MMDDYYYY",v.Local.sfilename)
+
+'build the file name
+f.Intrinsic.String.Build("{0}{1}{2}","Huntington",v.Local.sfilename,".csv",v.Local.sfilename)
+
+'set local variables as the dates selected
+V.Local.sbegdate.Set(V.Screen.Form!dtp1.Value)
+V.Local.senddate.Set(V.Screen.Form!dtp2.Value)
+
+'get the file path
+F.Intrinsic.String.Build("{0}\{1}","\\filesvr\finance\Accounts Payable\AP Check Positive Pay",v.Local.sfilename.Trim,V.Local.sfilepath)
+
+'close the form
+Gui.Form..Visible(false)
+
+F.Intrinsic.UI.InvokeWaitDialog("Generating Positive Pay...")
+
+'get and set check date, payee, amount of check and check number
+F.Intrinsic.String.Build("select ACCT_NO, CK_NO, AMOUNT, CK_DATE, PAYEE, CK_OR_VOID from V_CHECKS_LOG where CK_DATE between '{0}' and '{1}'",V.Local.sbegdate.PervasiveDate,V.Local.senddate.PervasiveDate,V.Local.ssql)
+F.ODBC.Connection!conx.OpenRecordsetRO("rst",V.Local.ssql)
+F.Intrinsic.Control.DoUntil(V.ODBC.conx!rst.EOF,=,"True")
+	'account number
+	v.Local.saccount.Set(v.ODBC.conx!rst.FieldValTrim!ACCT_NO)
+	'pad the account 12 spaces
+	f.Intrinsic.String.LPad(v.Local.saccount,"0",12,v.Local.saccount)
+	'set the check number
+	v.Local.sckno.Set(v.ODBC.conx!rst.FieldValTrim!CK_NO)
+	'pad 10 characters
+	F.Intrinsic.String.LPad(V.Local.sckno,"0",10,V.Local.sckno)
+	'set the check amount and format it
+	V.Local.samt.Set(V.ODBC.conx!rst.FieldValTrim!AMOUNT)
+	F.Intrinsic.String.format(V.Local.samt,"000000000.00",V.Local.samt)
+	'set the check date and format it
+	V.Local.schkdate.Set(V.ODBC.conx!rst.FieldValTrim!CK_DATE)
+	f.Intrinsic.String.Format(v.Local.schkdate,"MM/DD/YYYY",v.Local.schkdate)
+	'set the action as IS since we are not getting void checks
+	'if the CK or VOID is C then IS otherwise it has been canceled and we put
+	f.Intrinsic.Control.If(v.ODBC.conx!rst.FieldValTrim!CK_OR_VOID,=,"C")
+		v.Local.saction.Set("IS")
+	f.Intrinsic.Control.ElseIf(v.ODBC.conx!rst.FieldValTrim!CK_OR_VOID,=,"V")
+		v.Local.saction.Set("CN")
+	f.Intrinsic.Control.EndIf
+	'set the payee and pad
+	v.Local.spayee.Set(v.ODBC.conx!rst.FieldValTrim!PAYEE)
+	f.Intrinsic.String.LPad(v.Local.spayee," ",40,v.Local.spayee)
+	'set the second payee as blank 40 chars
+	v.Local.spayee2.Set("")
+	f.Intrinsic.String.LPad(v.Local.spayee2," ",40,v.Local.spayee2)
+	'write the line
+	f.Intrinsic.Control.If(v.Local.sfilefinal,=,"")
+		f.Intrinsic.String.Build("{0},{1},{2},{3},{4}",v.Local.saccount.Trim,v.Local.samt,v.Local.sckno.Trim,v.Local.schkdate,v.Local.spayee.trim,v.Local.sfilefinal)
+	f.Intrinsic.Control.Else
+	'if there is already a line started, continue
+		f.Intrinsic.String.Build("{0},{1},{2},{3},{4}",v.Local.saccount.Trim,v.Local.samt,v.Local.sckno.Trim,v.Local.schkdate,v.Local.spayee.trim,v.Local.sfileline)
+		f.Intrinsic.String.Build("{0}{1}{2}",v.Local.sfilefinal,v.Ambient.NewLine,v.Local.sfileline,v.Local.sfilefinal)
+	f.Intrinsic.Control.EndIf
+'	f.Intrinsic.Control.If(v.Local.sfilefinal,=,"")
+'		f.Intrinsic.String.Build("{0},{1},{2}",v.Local.sckno.Trim,v.Local.samt,v.Local.schkdate,v.Local.sfilefinal)
+'	f.Intrinsic.Control.Else
+'	'if there is already a line started, continue
+'		f.Intrinsic.String.Build("{0},{1},{2}",v.Local.sckno.Trim,v.Local.samt,v.Local.schkdate,v.Local.sfileline)
+'		f.Intrinsic.String.Build("{0}{1}{2}",v.Local.sfilefinal,v.Ambient.NewLine,v.Local.sfileline,v.Local.sfilefinal)
+'	f.Intrinsic.Control.EndIf
+
+	'clear all the variables
+	v.Local.saccount.Set("")
+	v.Local.schkdate.Set("")
+	v.Local.samt.Set("")
+	v.Local.spayee.Set("")
+	v.Local.spayee2.Set("")
+	v.Local.sckno.Set("")
+	'close connection
+	
+'move on to the next record in the recordset
+F.ODBC.conx!rst.MoveNext
+F.intrinsic.Control.Loop
+
+'write the string to the text file
+f.Intrinsic.File.String2File(v.Local.sfilepath,v.Local.sfilefinal)
+
+'inform the user, close the program
+f.Intrinsic.UI.CloseWaitDialog
+f.Intrinsic.UI.Msgbox("Positive Pay File Created")
+
+'call unload sub
+f.Intrinsic.Control.CallSub(form_unload)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_5367_PosPay.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub(form_unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.cmdCreate_Click.End
+
+Program.Sub.Comments.Start
+${$0$}$$}$WAW$}$11/14/2016 8:35:48 AM$}$True
+Program.Sub.Comments.End
